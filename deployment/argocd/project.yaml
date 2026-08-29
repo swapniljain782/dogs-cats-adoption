@@ -7,7 +7,7 @@ spec:
   description: Pet Adoption Platform - Cats vs Dogs classifier
 
   sourceRepos:
-    - "https://github.com/OWNER/REPO.git"   # <-- set to your actual repo URL
+    - "https://github.com/swapniljain782/dogs-cats-adoption.git"   # <-- set to your actual repo URL
 
   destinations:
     - namespace: pet-adoption
@@ -39,9 +39,14 @@ spec:
 
   roles:
     - name: ci-deployer
-      description: Used by Jenkins to trigger/verify syncs
+      description: Used by Jenkins to trigger/verify syncs and roll back on failure
       policies:
         - p, proj:pet-adoption:ci-deployer, applications, sync, pet-adoption/*, allow
         - p, proj:pet-adoption:ci-deployer, applications, get, pet-adoption/*, allow
+        # `argocd app rollback` reverts the Application to a prior sync
+        # revision, which ArgoCD's RBAC model treats as an update action, not
+        # `sync` - without this, Jenkinsfile's post-failure rollback stage
+        # would hit a permission-denied error right when you need it most.
+        - p, proj:pet-adoption:ci-deployer, applications, update, pet-adoption/*, allow
       # Generate a JWT for this role in Jenkins with:
       #   argocd proj role create-token pet-adoption ci-deployer
