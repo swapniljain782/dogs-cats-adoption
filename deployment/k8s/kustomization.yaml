@@ -8,8 +8,13 @@ resources:
   - deployment.yaml
   - service.yaml
   - hpa.yaml
-  # - ingress.yaml   # uncomment if your cluster has an ingress controller
+  - networkpolicy.yaml
+  - pdb.yaml
+  # - ingress.yaml     # uncomment if your cluster has an ingress controller
+  # - secret.yaml      # copy from secret.example.yaml, fill in a real key, then uncomment
+                        # (or better: manage this Secret via Sealed Secrets / External
+                        # Secrets Operator instead of applying it through this kustomization)
 
 images:
-  - name: ghcr.io/OWNER/REPO/pet-classifier
+  - name: ghcr.io/swapniljain782/dogs-cats-adoption/pet-classifier
     newTag: latest
