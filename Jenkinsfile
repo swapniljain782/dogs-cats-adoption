@@ -43,6 +43,12 @@ pipeline {
         ARGOCD_SERVER    = 'argocd.internal.example.com'  // <-- set to your ArgoCD server address
         GIT_REPO_URL     = 'git@github.com:OWNER/REPO.git' // <-- set to your actual repo (SSH form for push)
         GIT_BRANCH       = 'main'
+        // kubectl/kustomize/argocd live here (see deployment/k8s/jenkins.yaml's
+        // initContainer) since the Jenkins controller pod doesn't run these
+        // pipeline steps on a separate agent - it's all-in-one for this setup.
+        // ${env.PATH} reads the container's actual runtime PATH, so this only
+        // prepends - it doesn't clobber whatever the base image already set.
+        PATH = "/opt/devtools:${env.PATH}"
     }
 
     options {
