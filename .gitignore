@@ -8,12 +8,26 @@ venv/
 /data/raw/**
 !/data/raw/.gitkeep
 /data/processed/**
+!/data/processed/.gitkeep
 mlruns/
 mlartifacts/
+# artifacts/*.pt is normally DVC-tracked, not git-tracked - EXCEPT model.pt:
+# it's small (~1.5MB) and GitHub Actions has no way to `dvc pull` it (the DVC
+# remote is a local folder on the dev machine), so we commit this one file
+# directly to git purely so CI can build a real image, not a placeholder.
 artifacts/*.pt
 !artifacts/.gitkeep
+!artifacts/model.pt
 
 .pytest_cache/
 .coverage
 *.egg-info/
 .DS_Store
+
+# Never commit real secrets - copy secret.example.yaml to secret.yaml locally
+# and keep it out of git entirely (or better: use Sealed Secrets / External
+# Secrets Operator so no plaintext secret ever touches the filesystem here).
+deployment/k8s/secret.yaml
+*.pem
+*.key
+kubeconfig*

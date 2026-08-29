@@ -53,7 +53,13 @@ jobs:
           mkdir -p artifacts
           if [ ! -f artifacts/model.pt ]; then
             echo "No trained model checkpoint found; creating a placeholder so the image builds."
-            python -c "
+            # This job never installs project dependencies (it only builds/pushes
+            # the image), so torch isn't on this runner by default - install a
+            # throwaway CPU-only copy just for this fallback rather than assuming
+            # it's already present.
+            python3 -m venv /tmp/placeholder-venv
+            /tmp/placeholder-venv/bin/pip install --quiet --extra-index-url https://download.pytorch.org/whl/cpu torch
+            /tmp/placeholder-venv/bin/python -c "
           import torch, sys
           sys.path.insert(0, '.')
           from src.models.model import build_model
@@ -81,6 +87,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -89,3 +96,25 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  trigger-jenkins-cd:
+    # CD now lives entirely in Jenkins (see Jenkinsfile) - this just hands off
+    # the new image tag. Jenkins bumps the GitOps manifest, ArgoCD syncs the
+    # cluster, and Jenkins smoke-tests + rolls back on failure.
+    #
+    # Guarded on JENKINS_URL being set: skips cleanly (not a failure) until
+    # you've configured the JENKINS_URL / JENKINS_USER / JENKINS_API_TOKEN
+    # repo secrets, so CI stays green while you're still setting up Jenkins.
+    needs: build-and-push
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.JENKINS_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Jenkins CD pipeline
+        env:
+          JENKINS_URL: ${{ secrets.JENKINS_URL }}
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}
+          JENKINS_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
+        run: |
+          curl -sf -u "$JENKINS_USER:$JENKINS_TOKEN" \
+            "$JENKINS_URL/job/pet-classifier-cd/buildWithParameters?IMAGE_TAG=${{ github.sha }}"
+          echo "Triggered Jenkins CD for image tag ${{ github.sha }}"
