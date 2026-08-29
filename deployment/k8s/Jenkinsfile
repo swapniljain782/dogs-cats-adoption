@@ -25,43 +25,19 @@
 //                        if the deployment doesn't require a key.
 //
 // Required tooling: git, kustomize, argocd CLI, kubectl, python3.
-// These do NOT live on the Jenkins controller image (jenkins/jenkins:lts is
-// bare). Instead, every build launches a short-lived agent pod built from
-// deployment/jenkins/Dockerfile.agent (see the `agent` block below), which has
-// all of them preinstalled. Build/push that image once and set AGENT_IMAGE
-// below to point at it:
-//   docker build -t your-registry/jenkins-agent-pet-classifier:latest \
-//     -f deployment/jenkins/Dockerfile.agent deployment/jenkins
-//   docker push your-registry/jenkins-agent-pet-classifier:latest
-// Requires the "Kubernetes" plugin installed on the Jenkins controller, and
-// the RBAC in deployment/k8s/jenkins.yaml (Role/RoleBinding letting the
-// jenkins ServiceAccount create pods in the jenkins namespace).
+// These are baked directly into the Jenkins controller image (see
+// deployment/jenkins/Dockerfile) - `agent any` runs pipeline steps in that
+// same container, so no separate agent pods or Kubernetes plugin are needed.
 //
 // The smoke-test stage's kubectl calls run in-cluster under the
-// jenkins-deployer ServiceAccount (see the agent pod spec below and
-// deployment/k8s/jenkins-rbac.yaml) - no kubeconfig credential is needed
-// or used, since a kubeconfig copied from your host (e.g. kind's
-// 127.0.0.1:<port> API server address) wouldn't be reachable from a pod
-// running inside the cluster anyway.
-
-def AGENT_IMAGE = 'ghcr.io/swapniljain782/dogs-cats-adoption/jenkins-agent:latest' // <-- set to your actual pushed agent image
+// jenkins-deployer ServiceAccount (see deployment/k8s/jenkins.yaml's
+// serviceAccountName and deployment/k8s/jenkins-rbac.yaml) - no kubeconfig
+// credential is needed or used, since a kubeconfig copied from your host
+// (e.g. kind's 127.0.0.1:<port> API server address) wouldn't be reachable
+// from a pod running inside the cluster anyway.
 
 pipeline {
-    agent {
-        kubernetes {
-            yaml """
-apiVersion: v1
-kind: Pod
-spec:
-  serviceAccountName: jenkins-deployer
-  containers:
-  - name: cd-tools
-    image: ${AGENT_IMAGE}
-    command: ['cat']
-    tty: true
-"""
-        }
-    }
+    agent any
 
     parameters {
         string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Image tag pushed by CI (git SHA recommended over "latest")')
@@ -91,101 +67,84 @@ spec:
 
         stage('Checkout') {
             steps {
-                container('cd-tools') {
-                    checkout scm
-                }
+                checkout scm
             }
         }
 
         stage('Bump image tag (GitOps manifest update)') {
             steps {
-                container('cd-tools') {
-                    dir('deployment/k8s') {
-                        sh """
-                            kustomize edit set image ${REGISTRY}/${IMAGE_NAME}=${REGISTRY}/${IMAGE_NAME}:${params.IMAGE_TAG}
-                        """
-                    }
-                    withCredentials([sshUserPrivateKey(credentialsId: 'git-push-creds', keyFileVariable: 'SSH_KEY')]) {
-                        sh """
-                            export GIT_SSH_COMMAND="ssh -i \$SSH_KEY -o StrictHostKeyChecking=no"
-                            git config user.email "jenkins-ci@pet-adoption.local"
-                            git config user.name "jenkins-ci"
-                            git add deployment/k8s/kustomization.yaml
-                            git commit -m "deploy: pet-classifier:${params.IMAGE_TAG} [jenkins-cd]" || echo "No changes to commit (tag already deployed)"
-                            git push ${GIT_REPO_URL} HEAD:${GIT_BRANCH}
-                        """
-                    }
+                dir('deployment/k8s') {
+                    sh """
+                        kustomize edit set image ${REGISTRY}/${IMAGE_NAME}=${REGISTRY}/${IMAGE_NAME}:${params.IMAGE_TAG}
+                    """
+                }
+                withCredentials([sshUserPrivateKey(credentialsId: 'git-push-creds', keyFileVariable: 'SSH_KEY')]) {
+                    sh """
+                        export GIT_SSH_COMMAND="ssh -i \$SSH_KEY -o StrictHostKeyChecking=no"
+                        git config user.email "jenkins-ci@pet-adoption.local"
+                        git config user.name "jenkins-ci"
+                        git add deployment/k8s/kustomization.yaml
+                        git commit -m "deploy: pet-classifier:${params.IMAGE_TAG} [jenkins-cd]" || echo "No changes to commit (tag already deployed)"
+                        git push ${GIT_REPO_URL} HEAD:${GIT_BRANCH}
+                    """
                 }
             }
         }
 
         stage('ArgoCD login') {
             steps {
-                container('cd-tools') {
-                    withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
-                        sh """
-                            argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_TOKEN --grpc-web --insecure
-                        """
-                    }
+                withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
+                    sh """
+                        argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_TOKEN --grpc-web --insecure
+                    """
                 }
             }
         }
 
         stage('Sync via ArgoCD') {
             steps {
-                container('cd-tools') {
-                    sh """
-                        argocd app sync ${ARGOCD_APP} --prune --timeout 180
-                        argocd app wait ${ARGOCD_APP} --health --timeout 180
-                    """
-                }
+                sh """
+                    argocd app sync ${ARGOCD_APP} --prune --timeout 180
+                    argocd app wait ${ARGOCD_APP} --health --timeout 180
+                """
             }
         }
 
         stage('Smoke test') {
             steps {
-                container('cd-tools') {
-                    // No kubeconfig credential needed here: this container runs
-                    // in-cluster under the jenkins-deployer ServiceAccount
-                    // (see the pod spec above + deployment/k8s/jenkins-rbac.yaml),
-                    // so kubectl auto-detects in-cluster auth from the
-                    // auto-mounted SA token - a copied host kubeconfig would
-                    // point at a host-only address (e.g. kind's 127.0.0.1:<port>)
-                    // that isn't reachable from inside the cluster anyway.
-                    withCredentials([
-                        string(credentialsId: 'pet-classifier-api-key', variable: 'API_KEY_FOR_SMOKE_TEST')
-                    ]) {
-                        sh '''
-                            set -e
-                            kubectl port-forward -n "$NAMESPACE" svc/pet-classifier-svc 8080:80 &
-                            PF_PID=$!
-                            sleep 5
-                            trap "kill $PF_PID" EXIT
+                withCredentials([
+                    string(credentialsId: 'pet-classifier-api-key', variable: 'API_KEY_FOR_SMOKE_TEST')
+                ]) {
+                    sh '''
+                        set -e
+                        kubectl port-forward -n "$NAMESPACE" svc/pet-classifier-svc 8080:80 &
+                        PF_PID=$!
+                        sleep 5
+                        trap "kill $PF_PID" EXIT
 
-                            echo "Health check:"
-                            for i in $(seq 1 10); do
-                              if curl -sf http://localhost:8080/health; then
-                                echo "Health check passed"
-                                break
-                              fi
-                              [ "$i" -eq 10 ] && { echo "Health check failed"; exit 1; }
-                              sleep 3
-                            done
+                        echo "Health check:"
+                        for i in $(seq 1 10); do
+                          if curl -sf http://localhost:8080/health; then
+                            echo "Health check passed"
+                            break
+                          fi
+                          [ "$i" -eq 10 ] && { echo "Health check failed"; exit 1; }
+                          sleep 3
+                        done
 
-                            echo "Prediction check:"
-                            curl -sf -o sample_test.jpg https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg || \
-                              python3 -c "
+                        echo "Prediction check:"
+                        curl -sf -o sample_test.jpg https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg || \
+                          python3 -c "
 import numpy as np
 from PIL import Image
 Image.fromarray(np.random.randint(0,255,(224,224,3),dtype='uint8')).save('sample_test.jpg')
 "
-                            # -H is a no-op if API auth is disabled on this deployment;
-                            # required if the Secret in secret.yaml is populated.
-                            response=$(curl -sf -H "X-API-Key: $API_KEY_FOR_SMOKE_TEST" -F "file=@sample_test.jpg" http://localhost:8080/predict)
-                            echo "Prediction response: $response"
-                            echo "$response" | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'label' in d and 'probability' in d"
-                        '''
-                    }
+                        # -H is a no-op if API auth is disabled on this deployment;
+                        # required if the Secret in secret.yaml is populated.
+                        response=$(curl -sf -H "X-API-Key: $API_KEY_FOR_SMOKE_TEST" -F "file=@sample_test.jpg" http://localhost:8080/predict)
+                        echo "Prediction response: $response"
+                        echo "$response" | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'label' in d and 'probability' in d"
+                    '''
                 }
             }
         }
@@ -194,20 +153,16 @@ Image.fromarray(np.random.randint(0,255,(224,224,3),dtype='uint8')).save('sample
     post {
         failure {
             echo "Smoke test or sync failed - rolling back via ArgoCD."
-            container('cd-tools') {
-                withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
-                    sh """
-                        argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_TOKEN --grpc-web --insecure || true
-                        argocd app history ${ARGOCD_APP} || true
-                        argocd app rollback ${ARGOCD_APP} || true
-                    """
-                }
+            withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
+                sh """
+                    argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_TOKEN --grpc-web --insecure || true
+                    argocd app history ${ARGOCD_APP} || true
+                    argocd app rollback ${ARGOCD_APP} || true
+                """
             }
         }
         always {
-            container('cd-tools') {
-                sh 'pkill -f "kubectl port-forward" || true'
-            }
+            sh 'pkill -f "kubectl port-forward" || true'
         }
         success {
             echo "Deployed pet-classifier:${params.IMAGE_TAG} to ${NAMESPACE} - ArgoCD in sync, smoke test passed."
