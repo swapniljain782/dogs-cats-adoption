@@ -6,6 +6,7 @@ Usage:
     python src/models/train.py --data data/processed --epochs 10 --batch-size 32 --lr 1e-3
 """
 import argparse
+import json
 from pathlib import Path
 
 import matplotlib
@@ -165,6 +166,15 @@ def main():
         print(f"Test accuracy: {test_acc:.4f}")
         print(f"Confusion matrix:\n{cm}")
         print(f"Model saved to {args.out_model} (also logged to MLflow)")
+        metrics_path = Path("artifacts/metrics.json")
+with open(metrics_path, "w") as f:
+    json.dump({
+        "best_val_accuracy": best_val_acc,
+        "test_loss": test_loss,
+        "test_accuracy": test_acc,
+    }, f, indent=2)
+print(f"Metrics saved to {metrics_path}")
+
 
 
 if __name__ == "__main__":
