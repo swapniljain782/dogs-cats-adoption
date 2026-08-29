@@ -231,3 +231,4 @@ python scripts/simulate_traffic.py --url http://localhost:8000 --data-dir data/p
    request count, and class-distribution chart update.
 6. Show MLflow UI with the logged run (params/metrics/confusion matrix).
 7. Show `simulate_traffic.py` batch-accuracy result against the live deployment.
+# Full CI/CD pipeline verified Sat Aug 29 22:09:12 IST 2026
