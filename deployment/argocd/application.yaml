@@ -9,7 +9,7 @@ spec:
   project: pet-adoption
 
   source:
-    repoURL: "https://github.com/OWNER/REPO.git"   # <-- set to your actual repo URL
+    repoURL: "https://github.com/swapniljain782/dogs-cats-adoption.git"   # <-- set to your actual repo URL
     targetRevision: main
     path: deployment/k8s
     kustomize: {}

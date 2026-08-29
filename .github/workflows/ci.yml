@@ -121,6 +121,18 @@ jobs:
             echo "JENKINS_URL not configured yet - skipping (expected until Jenkins secrets are set)."
             exit 0
           fi
-          curl -sf -u "$JENKINS_USER:$JENKINS_TOKEN" \
-            "$JENKINS_URL/job/pet-classifier-cd/buildWithParameters?IMAGE_TAG=${{ github.sha }}"
+          # -w prints the HTTP status code, -o captures the body separately -
+          # curl -f alone hides the response body on error, which is exactly
+          # what's needed to diagnose a failure (401 vs 403 vs 404 vs ngrok's
+          # interstitial page all look identical as a bare exit code).
+          http_status=$(curl -s -o /tmp/jenkins_response.txt -w "%{http_code}" \
+            -u "$JENKINS_USER:$JENKINS_TOKEN" \
+            "$JENKINS_URL/job/pet-classifier-cd/buildWithParameters?IMAGE_TAG=${{ github.sha }}")
+          echo "HTTP status: $http_status"
+          echo "Response body:"
+          cat /tmp/jenkins_response.txt
+          if [ "$http_status" -ge 400 ]; then
+            echo "Jenkins trigger failed."
+            exit 1
+          fi
           echo "Triggered Jenkins CD for image tag ${{ github.sha }}"

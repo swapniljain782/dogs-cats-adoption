@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: pet-adoption
+  namespace: argocd
+spec:
+  description: Pet Adoption Platform - Cats vs Dogs classifier
+
+  sourceRepos:
+    - "https://github.com/OWNER/REPO.git"   # <-- set to your actual repo URL
+
+  destinations:
+    - namespace: pet-adoption
+      server: https://kubernetes.default.svc
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: "autoscaling"
+      kind: HorizontalPodAutoscaler
+    - group: "networking.k8s.io"
+      kind: Ingress
+    - group: "networking.k8s.io"
+      kind: NetworkPolicy
+    - group: "policy"
+      kind: PodDisruptionBudget
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+
+  roles:
+    - name: ci-deployer
+      description: Used by Jenkins to trigger/verify syncs and roll back on failure
+      policies:
+        - p, proj:pet-adoption:ci-deployer, applications, sync, pet-adoption/*, allow
+        - p, proj:pet-adoption:ci-deployer, applications, get, pet-adoption/*, allow
+        # `argocd app rollback` reverts the Application to a prior sync
+        # revision, which ArgoCD's RBAC model treats as an update action, not
+        # `sync` - without this, Jenkinsfile's post-failure rollback stage
+        # would hit a permission-denied error right when you need it most.
+        - p, proj:pet-adoption:ci-deployer, applications, update, pet-adoption/*, allow
+      # Generate a JWT for this role in Jenkins with:
+      #   argocd proj role create-token pet-adoption ci-deployer

@@ -6,7 +6,7 @@
 <title>Model Vitals — Pet Classifier Monitor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
     --teal-deep: #0F2427;
@@ -233,59 +233,70 @@
 
 <script>
 const MAX_POINTS = 40;
-const latencyCtx = document.getElementById('latencyChart').getContext('2d');
-const classCtx = document.getElementById('classChart').getContext('2d');
-
 const oat = '#EFE9DD', oatDim = '#93A6A3', coral = '#FF6B5B', mint = '#5FD9A4', amber = '#F0B429';
 
-const latencyChart = new Chart(latencyCtx, {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [{
-      data: [],
-      borderColor: coral,
-      backgroundColor: 'rgba(255,107,91,0.08)',
-      borderWidth: 2,
-      pointRadius: 0,
-      tension: 0.35,
-      fill: true,
-    }]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    animation: { duration: 250 },
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { display: false },
-      y: {
-        grid: { color: 'rgba(239,233,221,0.06)' },
-        ticks: { color: oatDim, font: { family: 'IBM Plex Mono', size: 10 } },
-        title: { display: true, text: 'ms', color: oatDim, font: { family: 'IBM Plex Mono', size: 10 } },
+// Chart.js is loaded from a CDN above. If that script fails to load (network
+// hiccup, ad-blocker, offline demo), don't let it take down the rest of the
+// dashboard - degrade to KPI tiles/text only instead of a blank "Connecting…"
+// screen forever.
+let latencyChart = null;
+let classChart = null;
+
+if (typeof Chart !== 'undefined') {
+  const latencyCtx = document.getElementById('latencyChart').getContext('2d');
+  const classCtx = document.getElementById('classChart').getContext('2d');
+
+  latencyChart = new Chart(latencyCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        data: [],
+        borderColor: coral,
+        backgroundColor: 'rgba(255,107,91,0.08)',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.35,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 250 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: {
+          grid: { color: 'rgba(239,233,221,0.06)' },
+          ticks: { color: oatDim, font: { family: 'IBM Plex Mono', size: 10 } },
+          title: { display: true, text: 'ms', color: oatDim, font: { family: 'IBM Plex Mono', size: 10 } },
+        }
       }
     }
-  }
-});
+  });
 
-const classChart = new Chart(classCtx, {
-  type: 'doughnut',
-  data: {
-    labels: ['Cats', 'Dogs'],
-    datasets: [{
-      data: [0, 0],
-      backgroundColor: [amber, mint],
-      borderColor: '#17383D',
-      borderWidth: 3,
-    }]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'bottom', labels: { color: oat, font: { family: 'IBM Plex Mono', size: 11 } } }
+  classChart = new Chart(classCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Cats', 'Dogs'],
+      datasets: [{
+        data: [0, 0],
+        backgroundColor: [amber, mint],
+        borderColor: '#17383D',
+        borderWidth: 3,
+      }]
     },
-    cutout: '68%',
-  }
-});
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: oat, font: { family: 'IBM Plex Mono', size: 11 } } }
+      },
+      cutout: '68%',
+    }
+  });
+} else {
+  console.warn('Chart.js failed to load from the CDN - charts disabled, KPI tiles will still update.');
+}
 
 function formatUptime(seconds) {
   const h = Math.floor(seconds / 3600);
@@ -327,12 +338,16 @@ async function poll() {
     document.getElementById('throughputFill').style.width = `${throughputPct}%`;
 
     const recent = d.recent_requests || [];
-    latencyChart.data.labels = recent.map((_, i) => i);
-    latencyChart.data.datasets[0].data = recent.map(r => r.latency_ms);
-    latencyChart.update('none');
+    if (latencyChart) {
+      latencyChart.data.labels = recent.map((_, i) => i);
+      latencyChart.data.datasets[0].data = recent.map(r => r.latency_ms);
+      latencyChart.update('none');
+    }
 
-    classChart.data.datasets[0].data = [d.predictions.cats || 0, d.predictions.dogs || 0];
-    classChart.update('none');
+    if (classChart) {
+      classChart.data.datasets[0].data = [d.predictions.cats || 0, d.predictions.dogs || 0];
+      classChart.update('none');
+    }
 
   } catch (e) {
     document.getElementById('healthDot').className = 'dot down';
