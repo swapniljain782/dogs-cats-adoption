@@ -15,7 +15,12 @@ echo "==> Creating argocd namespace"
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> Installing ArgoCD core manifests"
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# --server-side is required: the ApplicationSet CRD is large enough that
+# client-side apply's default last-applied-configuration annotation exceeds
+# Kubernetes' 256KB annotation limit. Server-side apply avoids that annotation
+# entirely (see https://github.com/argoproj/argo-cd/issues/26265).
+kubectl apply -n argocd --server-side --force-conflicts \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 echo "==> Waiting for argocd-server to be ready"
 kubectl -n argocd rollout status deployment/argocd-server --timeout=300s
