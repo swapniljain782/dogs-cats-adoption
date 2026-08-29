@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intake Console — Cats vs Dogs Classifier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal-deep: #132A2E;
+    --teal-panel: #1B3B40;
+    --oat: #EFE9DD;
+    --oat-dim: #C9C2B3;
+    --coral: #FF6B5B;
+    --mint: #5FD9A4;
+    --amber: #F0B429;
+    --line: rgba(239,233,221,0.14);
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 15% 8%, rgba(95,217,164,0.06), transparent 40%),
+      var(--teal-deep);
+    color: var(--oat);
+    font-family: 'Space Grotesk', sans-serif;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 48px 20px;
+  }
+  .wrap { width: 100%; max-width: 880px; }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mint);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--mint);
+    box-shadow: 0 0 0 3px rgba(95,217,164,0.18);
+  }
+  h1 {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 700;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--oat-dim);
+    font-size: 15px;
+    max-width: 560px;
+    line-height: 1.5;
+    margin-bottom: 36px;
+  }
+
+  .card {
+    background: var(--teal-panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .intake-tab {
+    position: absolute;
+    top: 0; left: 28px;
+    background: var(--amber);
+    color: var(--teal-deep);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 5px 14px 4px;
+    border-radius: 0 0 8px 8px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+  .drop-zone {
+    padding: 56px 32px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-right: 1px solid var(--line);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    min-height: 340px;
+  }
+  @media (max-width: 700px) { .drop-zone { border-right: none; border-bottom: 1px solid var(--line); } }
+  .drop-zone.dragover { background: rgba(95,217,164,0.06); }
+  .drop-zone svg { opacity: 0.55; margin-bottom: 14px; }
+  .drop-zone .dz-label { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .drop-zone .dz-hint { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--oat-dim); }
+  .drop-zone input { display: none; }
+
+  .preview-img {
+    max-width: 100%;
+    max-height: 260px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    object-fit: cover;
+  }
+
+  .result-pane {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 340px;
+    position: relative;
+  }
+
+  .placeholder-state { color: var(--oat-dim); font-size: 14px; font-family: 'IBM Plex Mono', monospace; }
+
+  .stamp {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+    border: 3px solid currentColor;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    transform: rotate(-4deg) scale(0.4);
+    opacity: 0;
+    align-self: flex-start;
+    animation: stamp-in 0.35s cubic-bezier(.2,1.4,.6,1) forwards;
+  }
+  .stamp.cats { color: var(--amber); }
+  .stamp.dogs { color: var(--mint); }
+  @keyframes stamp-in {
+    0% { transform: rotate(-4deg) scale(2.2); opacity: 0; }
+    60% { opacity: 1; }
+    100% { transform: rotate(-4deg) scale(1); opacity: 1; }
+  }
+
+  .confidence-row { margin-top: 26px; }
+  .conf-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+  }
+  .conf-line .lbl { width: 46px; text-transform: uppercase; color: var(--oat-dim); }
+  .conf-track {
+    flex: 1;
+    height: 8px;
+    background: rgba(239,233,221,0.1);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .conf-fill {
+    height: 100%;
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.6s cubic-bezier(.2,.8,.3,1);
+  }
+  .conf-fill.cats { background: var(--amber); }
+  .conf-fill.dogs { background: var(--mint); }
+  .conf-val { width: 48px; text-align: right; color: var(--oat); }
+
+  .error-text { color: var(--coral); font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+
+  .status-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--oat-dim);
+    padding: 14px 32px;
+    border-top: 1px solid var(--line);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--oat-dim); }
+  .dot.up { background: var(--mint); box-shadow: 0 0 0 3px rgba(95,217,164,0.18); }
+  .dot.down { background: var(--coral); box-shadow: 0 0 0 3px rgba(255,107,91,0.18); }
+
+  .spinner {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 3px solid rgba(239,233,221,0.15);
+    border-top-color: var(--mint);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  a.dash-link {
+    color: var(--oat-dim);
+    text-decoration: none;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    border-bottom: 1px dotted var(--oat-dim);
+  }
+  a.dash-link:hover { color: var(--mint); border-color: var(--mint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Intake console · live inference</div>
+  <h1>Is it a cat or a dog?</h1>
+  <p class="sub">Upload a photo the way you would for a shelter listing. The model reads it on the spot and stamps a verdict with its confidence — this is the same endpoint the adoption platform calls in production.</p>
+
+  <div class="card">
+    <div class="intake-tab">CASE FILE</div>
+    <div class="grid">
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept="image/png, image/jpeg">
+        <div id="dzContent">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="dz-label">Drop a photo here</div>
+          <div class="dz-hint">or click to browse · JPG / PNG</div>
+        </div>
+      </div>
+      <div class="result-pane" id="resultPane">
+        <div class="placeholder-state">Awaiting a photo. Result will stamp here once submitted.</div>
+      </div>
+    </div>
+    <div class="status-strip">
+      <span class="dot" id="healthDot"></span>
+      <span id="healthText">Checking service…</span>
+      <span style="flex:1"></span>
+      <a class="dash-link" href="/ui/dashboard/">View live metrics dashboard →</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const dzContent = document.getElementById('dzContent');
+const resultPane = document.getElementById('resultPane');
+const healthDot = document.getElementById('healthDot');
+const healthText = document.getElementById('healthText');
+
+async function checkHealth() {
+  try {
+    const res = await fetch('/health');
+    const data = await res.json();
+    if (data.status === 'ok' && data.model_loaded) {
+      healthDot.className = 'dot up';
+      healthText.textContent = 'Service healthy · model loaded';
+    } else {
+      healthDot.className = 'dot down';
+      healthText.textContent = 'Service up, model not loaded yet';
+    }
+  } catch (e) {
+    healthDot.className = 'dot down';
+    healthText.textContent = 'Service unreachable';
+  }
+}
+checkHealth();
+setInterval(checkHealth, 8000);
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+function handleFile(file) {
+  if (!file.type.match(/image\/(jpeg|png|jpg)/)) {
+    showError('Only JPEG/PNG images are supported.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    dzContent.innerHTML = `<img class="preview-img" src="${e.target.result}" alt="preview">`;
+  };
+  reader.readAsDataURL(file);
+  submitPrediction(file);
+}
+
+function showLoading() {
+  resultPane.innerHTML = `<div style="display:flex;align-items:center;gap:14px;">
+    <div class="spinner"></div>
+    <span class="placeholder-state" style="margin:0;">Running inference…</span>
+  </div>`;
+}
+
+function showError(msg) {
+  resultPane.innerHTML = `<div class="error-text">⚠ ${msg}</div>`;
+}
+
+async function submitPrediction(file) {
+  showLoading();
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/predict', { method: 'POST', body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Prediction failed.' }));
+      showError(err.detail || 'Prediction failed.');
+      return;
+    }
+    const data = await res.json();
+    renderResult(data);
+  } catch (e) {
+    showError('Could not reach the prediction service.');
+  }
+}
+
+function renderResult(data) {
+  const label = data.label;
+  const probs = data.probabilities;
+  const catPct = Math.round((probs.cats || 0) * 100);
+  const dogPct = Math.round((probs.dogs || 0) * 100);
+  const pct = Math.round(data.probability * 100);
+
+  resultPane.innerHTML = `
+    <div class="stamp ${label}">${label} — ${pct}%</div>
+    <div class="confidence-row">
+      <div class="conf-line">
+        <span class="lbl">Cats</span>
+        <div class="conf-track"><div class="conf-fill cats" style="width:${catPct}%"></div></div>
+        <span class="conf-val">${catPct}%</span>
+      </div>
+      <div class="conf-line">
+        <span class="lbl">Dogs</span>
+        <div class="conf-track"><div class="conf-fill dogs" style="width:${dogPct}%"></div></div>
+        <span class="conf-val">${dogPct}%</span>
+      </div>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>

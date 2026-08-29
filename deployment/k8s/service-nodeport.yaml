@@ -1,0 +1,19 @@
+# Optional: use this instead of service.yaml for quick local access on
+# kind/minikube without setting up an ingress controller.
+#   kubectl apply -f service-nodeport.yaml -n pet-adoption
+# Then reach the service at http://localhost:30080 (kind) or via
+# `minikube service pet-classifier-svc-nodeport -n pet-adoption`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pet-classifier-svc-nodeport
+  namespace: pet-adoption
+spec:
+  selector:
+    app: pet-classifier
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+      nodePort: 30080
+  type: NodePort

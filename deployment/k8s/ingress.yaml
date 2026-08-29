@@ -1,0 +1,23 @@
+# Optional: only apply this if your cluster has an ingress controller
+# (e.g. ingress-nginx on kind/minikube/microk8s). Not included in the default
+# kustomization.yaml - add it to `resources:` there if you want it.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pet-classifier-ingress
+  namespace: pet-adoption
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: pet-classifier.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pet-classifier-svc
+                port:
+                  number: 80

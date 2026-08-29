@@ -1,0 +1,96 @@
+# Kubernetes deployment path (alternative to cd-compose.yml - enable only one).
+#
+# Requires a repo secret `KUBE_CONFIG` containing a base64-encoded kubeconfig
+# for a reachable cluster (a local kind/minikube cluster exposed to a
+# self-hosted runner, or a remote cluster). Generate it with:
+#   cat ~/.kube/config | base64 -w0
+name: CD (Kubernetes)
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: ["main"]
+    types: [completed]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/pet-classifier
+  NAMESPACE: pet-adoption
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.30.0"
+
+      - name: Set up kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+
+      - name: Verify cluster connectivity
+        run: kubectl cluster-info
+
+      - name: Set image tag via kustomize
+        working-directory: deployment/k8s
+        run: |
+          kustomize edit set image \
+            ghcr.io/OWNER/REPO/pet-classifier=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Apply manifests
+        working-directory: deployment/k8s
+        run: kustomize build . | kubectl apply -f -
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/pet-classifier -n ${{ env.NAMESPACE }} --timeout=180s
+
+      - name: Smoke test via port-forward
+        run: |
+          kubectl port-forward -n ${{ env.NAMESPACE }} svc/pet-classifier-svc 8080:80 &
+          PF_PID=$!
+          sleep 5
+
+          echo "Health check:"
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:8080/health; then
+              echo "Health check passed"
+              break
+            fi
+            [ "$i" -eq 10 ] && { echo "Health check failed"; kill $PF_PID; exit 1; }
+            sleep 3
+          done
+
+          echo "Prediction check:"
+          curl -sf -o sample_test.jpg https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg || \
+            python3 -c "
+          import numpy as np
+          from PIL import Image
+          Image.fromarray(np.random.randint(0,255,(224,224,3),dtype='uint8')).save('sample_test.jpg')
+          "
+          response=$(curl -sf -F "file=@sample_test.jpg" http://localhost:8080/predict)
+          echo "Prediction response: $response"
+          echo "$response" | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'label' in d and 'probability' in d"
+
+          kill $PF_PID
+
+      - name: Roll back on failure
+        if: failure()
+        run: |
+          echo "Smoke tests failed - rolling back to the previous revision."
+          kubectl rollout undo deployment/pet-classifier -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/pet-classifier -n ${{ env.NAMESPACE }} --timeout=120s
+          kubectl logs -n ${{ env.NAMESPACE }} -l app=pet-classifier --tail=100
+          exit 1

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model Vitals — Pet Classifier Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<style>
+  :root {
+    --teal-deep: #0F2427;
+    --teal-panel: #17383D;
+    --oat: #EFE9DD;
+    --oat-dim: #93A6A3;
+    --coral: #FF6B5B;
+    --mint: #5FD9A4;
+    --amber: #F0B429;
+    --line: rgba(239,233,221,0.12);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--teal-deep);
+    color: var(--oat);
+    font-family: 'Space Grotesk', sans-serif;
+    padding: 40px 24px 60px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mint);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--mint);
+    animation: blip 1.6s ease-in-out infinite;
+  }
+  @keyframes blip { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+  h1 { font-size: clamp(24px, 3.4vw, 32px); margin: 0; font-weight: 700; }
+  .back-link {
+    color: var(--oat-dim);
+    text-decoration: none;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    border-bottom: 1px dotted var(--oat-dim);
+  }
+  .back-link:hover { color: var(--mint); border-color: var(--mint); }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .kpi {
+    background: var(--teal-panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 18px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi .kpi-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--oat-dim);
+    margin-bottom: 8px;
+  }
+  .kpi .kpi-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .kpi .kpi-unit { font-size: 13px; color: var(--oat-dim); margin-left: 4px; }
+  .kpi.pulse .kpi-value { color: var(--coral); }
+  .kpi.mint .kpi-value { color: var(--mint); }
+  .kpi.amber .kpi-value { color: var(--amber); }
+
+  .panels {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--teal-panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--oat-dim);
+    margin: 0 0 16px;
+    font-weight: 500;
+  }
+  .chart-box { position: relative; height: 220px; }
+
+  .util-row { display: flex; flex-direction: column; gap: 18px; }
+  .util-item .util-top {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; margin-bottom: 6px;
+  }
+  .util-item .util-top .val { font-size: 15px; font-weight: 600; }
+  .util-track { height: 8px; background: rgba(239,233,221,0.08); border-radius: 4px; overflow: hidden; }
+  .util-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .util-fill.cpu { background: var(--coral); }
+  .util-fill.mem { background: var(--amber); }
+  .util-fill.throughput { background: var(--mint); }
+
+  .note {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--oat-dim);
+    margin-top: 4px;
+    line-height: 1.5;
+  }
+
+  .footer-strip {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--oat-dim);
+    margin-top: 8px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--oat-dim); }
+  .dot.up { background: var(--mint); box-shadow: 0 0 0 3px rgba(95,217,164,0.18); }
+  .dot.down { background: var(--coral); box-shadow: 0 0 0 3px rgba(255,107,91,0.18); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Live · refreshing every 3s</div>
+      <h1>Model vitals</h1>
+    </div>
+    <a class="back-link" href="/ui/test-console/">← Back to intake console</a>
+  </header>
+
+  <div class="kpi-grid">
+    <div class="kpi pulse">
+      <div class="kpi-label">Requests served</div>
+      <div class="kpi-value" id="kpiRequests">—</div>
+    </div>
+    <div class="kpi mint">
+      <div class="kpi-label">Avg latency</div>
+      <div class="kpi-value" id="kpiLatency">—<span class="kpi-unit">ms</span></div>
+    </div>
+    <div class="kpi amber">
+      <div class="kpi-label">Uptime</div>
+      <div class="kpi-value" id="kpiUptime">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Error rate</div>
+      <div class="kpi-value" id="kpiErrors">—<span class="kpi-unit">%</span></div>
+    </div>
+    <div class="kpi mint">
+      <div class="kpi-label">Throughput</div>
+      <div class="kpi-value" id="kpiThroughput">—<span class="kpi-unit">KB/s</span></div>
+    </div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <h2>Latency pulse (ms per request)</h2>
+      <div class="chart-box"><canvas id="latencyChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Class distribution</h2>
+      <div class="chart-box"><canvas id="classChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panels" style="grid-template-columns: 1fr 1fr;">
+    <div class="panel">
+      <h2>Compute utilization</h2>
+      <div class="util-row">
+        <div class="util-item">
+          <div class="util-top"><span>CPU</span><span class="val" id="cpuVal">—%</span></div>
+          <div class="util-track"><div class="util-fill cpu" id="cpuFill" style="width:0%"></div></div>
+        </div>
+        <div class="util-item">
+          <div class="util-top"><span>Memory</span><span class="val" id="memVal">—%</span></div>
+          <div class="util-track"><div class="util-fill mem" id="memFill" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="note">Host CPU/RAM currently consumed by the inference service container.</div>
+    </div>
+    <div class="panel">
+      <h2>Payload throughput</h2>
+      <div class="util-row">
+        <div class="util-item">
+          <div class="util-top"><span>Image bytes / sec</span><span class="val" id="throughputVal">— KB/s</span></div>
+          <div class="util-track"><div class="util-fill throughput" id="throughputFill" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="note">This is an image classifier, not a language model, so there's no token count.
+      This tracks the equivalent idea for image workloads — bytes of image data processed per second.</div>
+    </div>
+  </div>
+
+  <div class="footer-strip">
+    <span class="dot" id="healthDot"></span>
+    <span id="healthText">Connecting…</span>
+  </div>
+</div>
+
+<script>
+const MAX_POINTS = 40;
+const latencyCtx = document.getElementById('latencyChart').getContext('2d');
+const classCtx = document.getElementById('classChart').getContext('2d');
+
+const oat = '#EFE9DD', oatDim = '#93A6A3', coral = '#FF6B5B', mint = '#5FD9A4', amber = '#F0B429';
+
+const latencyChart = new Chart(latencyCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      data: [],
+      borderColor: coral,
+      backgroundColor: 'rgba(255,107,91,0.08)',
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.35,
+      fill: true,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 250 },
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { display: false },
+      y: {
+        grid: { color: 'rgba(239,233,221,0.06)' },
+        ticks: { color: oatDim, font: { family: 'IBM Plex Mono', size: 10 } },
+        title: { display: true, text: 'ms', color: oatDim, font: { family: 'IBM Plex Mono', size: 10 } },
+      }
+    }
+  }
+});
+
+const classChart = new Chart(classCtx, {
+  type: 'doughnut',
+  data: {
+    labels: ['Cats', 'Dogs'],
+    datasets: [{
+      data: [0, 0],
+      backgroundColor: [amber, mint],
+      borderColor: '#17383D',
+      borderWidth: 3,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom', labels: { color: oat, font: { family: 'IBM Plex Mono', size: 11 } } }
+    },
+    cutout: '68%',
+  }
+});
+
+function formatUptime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+async function poll() {
+  try {
+    const res = await fetch('/dashboard/metrics');
+    if (!res.ok) throw new Error('bad status');
+    const d = await res.json();
+
+    document.getElementById('healthDot').className = 'dot up';
+    document.getElementById('healthText').textContent = d.model_loaded
+      ? 'Connected · model loaded'
+      : 'Connected · model not loaded';
+
+    document.getElementById('kpiRequests').textContent = d.request_count;
+    document.getElementById('kpiLatency').innerHTML = `${d.average_latency_ms}<span class="kpi-unit">ms</span>`;
+    document.getElementById('kpiUptime').textContent = formatUptime(d.uptime_seconds);
+    const errRate = d.request_count > 0 ? ((d.error_count / (d.request_count + d.error_count)) * 100).toFixed(1) : '0.0';
+    document.getElementById('kpiErrors').innerHTML = `${errRate}<span class="kpi-unit">%</span>`;
+    document.getElementById('kpiThroughput').innerHTML = `${d.throughput_kb_per_sec}<span class="kpi-unit">KB/s</span>`;
+
+    if (d.cpu_percent !== null && d.cpu_percent !== undefined) {
+      document.getElementById('cpuVal').textContent = `${d.cpu_percent.toFixed(1)}%`;
+      document.getElementById('cpuFill').style.width = `${Math.min(d.cpu_percent, 100)}%`;
+    }
+    if (d.memory_percent !== null && d.memory_percent !== undefined) {
+      document.getElementById('memVal').textContent = `${d.memory_percent.toFixed(1)}%`;
+      document.getElementById('memFill').style.width = `${Math.min(d.memory_percent, 100)}%`;
+    }
+    const throughputPct = Math.min((d.throughput_kb_per_sec / 500) * 100, 100);
+    document.getElementById('throughputVal').textContent = `${d.throughput_kb_per_sec} KB/s`;
+    document.getElementById('throughputFill').style.width = `${throughputPct}%`;
+
+    const recent = d.recent_requests || [];
+    latencyChart.data.labels = recent.map((_, i) => i);
+    latencyChart.data.datasets[0].data = recent.map(r => r.latency_ms);
+    latencyChart.update('none');
+
+    classChart.data.datasets[0].data = [d.predictions.cats || 0, d.predictions.dogs || 0];
+    classChart.update('none');
+
+  } catch (e) {
+    document.getElementById('healthDot').className = 'dot down';
+    document.getElementById('healthText').textContent = 'Disconnected from service';
+  }
+}
+
+poll();
+setInterval(poll, 3000);
+</script>
+</body>
+</html>

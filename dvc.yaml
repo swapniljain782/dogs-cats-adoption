@@ -1,0 +1,21 @@
+stages:
+  preprocess:
+    cmd: python src/data/preprocess.py --input data/raw --output data/processed --img-size 224
+    deps:
+      - src/data/preprocess.py
+      - data/raw
+    outs:
+      - data/processed
+
+  train:
+    cmd: python src/models/train.py --data data/processed --epochs 10
+    deps:
+      - src/models/train.py
+      - src/models/model.py
+      - src/data/dataset.py
+      - data/processed
+    outs:
+      - artifacts/model.pt
+    metrics:
+      - artifacts/metrics.json:
+          cache: false
