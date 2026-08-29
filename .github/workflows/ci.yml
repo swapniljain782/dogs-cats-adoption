@@ -125,7 +125,7 @@ jobs:
           # curl -f alone hides the response body on error, which is exactly
           # what's needed to diagnose a failure (401 vs 403 vs 404 vs ngrok's
           # interstitial page all look identical as a bare exit code).
-          http_status=$(curl -s -o /tmp/jenkins_response.txt -w "%{http_code}" \
+          http_status=$(curl -s -X POST -o /tmp/jenkins_response.txt -w "%{http_code}" \
             -u "$JENKINS_USER:$JENKINS_TOKEN" \
             "$JENKINS_URL/job/pet-classifier-cd/buildWithParameters?IMAGE_TAG=${{ github.sha }}")
           echo "HTTP status: $http_status"
