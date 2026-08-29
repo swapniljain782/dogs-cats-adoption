@@ -10,6 +10,49 @@ spec:
     requests:
       storage: 5Gi
 ---
+# Jenkins itself needs permission to create/watch/delete Pods (and their logs)
+# in its own namespace so the Kubernetes plugin can launch short-lived agent
+# pods per build. Without this, pod-template-based `agent { kubernetes {...} }`
+# blocks in the Jenkinsfile fail with a Forbidden error from the API server.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins
+  namespace: jenkins
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-agent-launcher
+  namespace: jenkins
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete", "get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-agent-launcher-binding
+  namespace: jenkins
+subjects:
+  - kind: ServiceAccount
+    name: jenkins
+    namespace: jenkins
+roleRef:
+  kind: Role
+  name: jenkins-agent-launcher
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,10 +68,17 @@ spec:
       labels:
         app: jenkins
     spec:
+      serviceAccountName: jenkins
       securityContext:
         fsGroup: 1000
       containers:
       - name: jenkins
+        # Controller stays on the stock LTS image - it only serves the UI and
+        # schedules builds. The CLI tools (kustomize/kubectl/argocd/python3)
+        # live on the per-build AGENT pod instead (deployment/jenkins/Dockerfile.agent),
+        # started by the `agent { kubernetes { ... } }` block in the Jenkinsfile.
+        # Requires the "Kubernetes" plugin to be installed
+        # (Manage Jenkins > Plugins > Available, search "Kubernetes").
         image: jenkins/jenkins:lts
         ports:
         - containerPort: 8080
