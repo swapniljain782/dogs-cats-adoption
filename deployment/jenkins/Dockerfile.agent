@@ -1,0 +1,44 @@
+# Jenkins agent image with the CLI tools the CD pipeline (Jenkinsfile) needs:
+# git, kustomize, kubectl, the ArgoCD CLI, and python3 (for the smoke-test
+# fallback image generator). Build and push this, then point your Jenkins
+# agent/pod template at it instead of a bare `jenkins/inbound-agent`.
+#
+#   docker build -t your-registry/jenkins-agent-pet-classifier:latest \
+#     -f deployment/jenkins/Dockerfile.agent deployment/jenkins
+#   docker push your-registry/jenkins-agent-pet-classifier:latest
+
+FROM jenkins/inbound-agent:latest-jdk17
+
+USER root
+
+ARG KUBECTL_VERSION=v1.30.0
+ARG KUSTOMIZE_VERSION=v5.4.3
+ARG ARGOCD_VERSION=v2.11.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        git \
+        openssh-client \
+        python3 \
+        python3-pip \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# kubectl
+RUN curl -fsSL -o /usr/local/bin/kubectl \
+        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+    && chmod +x /usr/local/bin/kubectl
+
+# kustomize
+RUN curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+        | tar -xz -C /usr/local/bin/
+
+# argocd CLI
+RUN curl -fsSL -o /usr/local/bin/argocd \
+        "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64" \
+    && chmod +x /usr/local/bin/argocd
+
+# smoke-test fallback image generator dependencies
+RUN pip3 install --no-cache-dir --break-system-packages numpy Pillow
+
+USER jenkins
