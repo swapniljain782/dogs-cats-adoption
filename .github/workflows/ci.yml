@@ -102,11 +102,13 @@ jobs:
     # the new image tag. Jenkins bumps the GitOps manifest, ArgoCD syncs the
     # cluster, and Jenkins smoke-tests + rolls back on failure.
     #
-    # Guarded on JENKINS_URL being set: skips cleanly (not a failure) until
-    # you've configured the JENKINS_URL / JENKINS_USER / JENKINS_API_TOKEN
-    # repo secrets, so CI stays green while you're still setting up Jenkins.
+    # Note: the `secrets` context isn't accessible inside a job-level `if:`
+    # expression (GitHub Actions restriction), so the "is Jenkins configured
+    # yet" check happens inside the shell step instead, via a plain env-var
+    # emptiness check - that exits 0 (not a failure) until the JENKINS_URL /
+    # JENKINS_USER / JENKINS_API_TOKEN repo secrets are set.
     needs: build-and-push
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.JENKINS_URL != '' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Jenkins CD pipeline
@@ -115,6 +117,10 @@ jobs:
           JENKINS_USER: ${{ secrets.JENKINS_USER }}
           JENKINS_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
         run: |
+          if [ -z "$JENKINS_URL" ]; then
+            echo "JENKINS_URL not configured yet - skipping (expected until Jenkins secrets are set)."
+            exit 0
+          fi
           curl -sf -u "$JENKINS_USER:$JENKINS_TOKEN" \
             "$JENKINS_URL/job/pet-classifier-cd/buildWithParameters?IMAGE_TAG=${{ github.sha }}"
           echo "Triggered Jenkins CD for image tag ${{ github.sha }}"
