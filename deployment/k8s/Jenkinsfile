@@ -18,7 +18,6 @@
 //                       manifest-bump commit)
 //   argocd-auth-token - ArgoCD auth token for the "ci-deployer" project role
 //                        (see deployment/argocd/project.yaml)
-//   kubeconfig-cd     - kubeconfig for the target cluster (smoke test only)
 //   pet-classifier-api-key - (Secret text) the same value stored in the
 //                        cluster's `pet-classifier-secrets` Secret, so the
 //                        smoke test can authenticate if API-key auth is
@@ -37,6 +36,13 @@
 // Requires the "Kubernetes" plugin installed on the Jenkins controller, and
 // the RBAC in deployment/k8s/jenkins.yaml (Role/RoleBinding letting the
 // jenkins ServiceAccount create pods in the jenkins namespace).
+//
+// The smoke-test stage's kubectl calls run in-cluster under the
+// jenkins-deployer ServiceAccount (see the agent pod spec below and
+// deployment/k8s/jenkins-rbac.yaml) - no kubeconfig credential is needed
+// or used, since a kubeconfig copied from your host (e.g. kind's
+// 127.0.0.1:<port> API server address) wouldn't be reachable from a pod
+// running inside the cluster anyway.
 
 def AGENT_IMAGE = 'ghcr.io/swapniljain782/dogs-cats-adoption/jenkins-agent:latest' // <-- set to your actual pushed agent image
 
@@ -47,6 +53,7 @@ pipeline {
 apiVersion: v1
 kind: Pod
 spec:
+  serviceAccountName: jenkins-deployer
   containers:
   - name: cd-tools
     image: ${AGENT_IMAGE}
@@ -138,8 +145,14 @@ spec:
         stage('Smoke test') {
             steps {
                 container('cd-tools') {
+                    // No kubeconfig credential needed here: this container runs
+                    // in-cluster under the jenkins-deployer ServiceAccount
+                    // (see the pod spec above + deployment/k8s/jenkins-rbac.yaml),
+                    // so kubectl auto-detects in-cluster auth from the
+                    // auto-mounted SA token - a copied host kubeconfig would
+                    // point at a host-only address (e.g. kind's 127.0.0.1:<port>)
+                    // that isn't reachable from inside the cluster anyway.
                     withCredentials([
-                        file(credentialsId: 'kubeconfig-cd', variable: 'KUBECONFIG'),
                         string(credentialsId: 'pet-classifier-api-key', variable: 'API_KEY_FOR_SMOKE_TEST')
                     ]) {
                         sh '''
