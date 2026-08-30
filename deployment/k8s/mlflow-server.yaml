@@ -28,6 +28,7 @@ spec:
       containers:
         - name: mlflow
           image: ghcr.io/swapniljain782/dogs-cats-adoption/mlflow-server:latest
+          imagePullPolicy: IfNotPresent
           command: ["mlflow", "server"]
           args:
             - "--host"
