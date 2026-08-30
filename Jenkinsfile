@@ -91,7 +91,13 @@ pipeline {
                 }
                 withCredentials([sshUserPrivateKey(credentialsId: 'git-push-creds', keyFileVariable: 'SSH_KEY')]) {
                     sh """
-                        export GIT_SSH_COMMAND="ssh -i \$SSH_KEY -o StrictHostKeyChecking=no"
+                        # BatchMode=yes disables any interactive auth fallback (password/
+                        # keyboard-interactive prompts) - without it, a failed key auth
+                        # silently hangs waiting for input from a closed stdin until
+                        # GitHub's idle timeout kicks in (~10 min), instead of failing
+                        # immediately with a clear "Permission denied (publickey)".
+                        # ConnectTimeout bounds the initial TCP/handshake phase too.
+                        export GIT_SSH_COMMAND="ssh -i \$SSH_KEY -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15"
                         git config user.email "jenkins-ci@pet-adoption.local"
                         git config user.name "jenkins-ci"
                         git add deployment/k8s/kustomization.yaml
@@ -120,8 +126,18 @@ pipeline {
 
         stage('Smoke test') {
             steps {
+                // No kubeconfig-cd credential here: this runs in-cluster
+                // under the jenkins-deployer ServiceAccount attached to the
+                // Jenkins pod (see deployment/k8s/jenkins.yaml's
+                // serviceAccountName + deployment/k8s/jenkins-rbac.yaml),
+                // so kubectl auto-detects in-cluster auth from the mounted
+                // SA token. A stale/previously-generated kubeconfig file
+                // credential can carry an OLD ServiceAccount's token (e.g.
+                // from before jenkins-deployer was moved into the jenkins
+                // namespace) that no longer has RBAC granted to it -
+                // exactly the "Forbidden ... jenkins-deployer" error this
+                // caused. Do not reintroduce a kubeconfig-cd credential here.
                 withCredentials([
-                    file(credentialsId: 'kubeconfig-cd', variable: 'KUBECONFIG'),
                     string(credentialsId: 'pet-classifier-api-key', variable: 'API_KEY_FOR_SMOKE_TEST')
                 ]) {
                     sh '''
