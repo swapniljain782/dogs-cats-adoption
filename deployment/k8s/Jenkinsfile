@@ -142,14 +142,25 @@ pipeline {
                 ]) {
                     sh '''
                         set -e
-                        kubectl port-forward -n "$NAMESPACE" svc/pet-classifier-svc 8080:80 &
+                        # Kill any leftover port-forward from a previous failed/aborted
+                        # build that didn't get cleaned up (this build's own port-forward
+                        # otherwise fails to bind if one's still running).
+                        pkill -f "kubectl port-forward.*pet-classifier-svc" || true
+                        sleep 1
+
+                        # Port 8090, not 8080: this pipeline runs with `agent any`, so
+                        # these steps execute directly inside the Jenkins controller
+                        # container itself - which already has its OWN web UI bound to
+                        # 8080. Forwarding to 8080 here collides with Jenkins itself, not
+                        # anything on your host machine.
+                        kubectl port-forward -n "$NAMESPACE" svc/pet-classifier-svc 8090:80 &
                         PF_PID=$!
                         sleep 5
                         trap "kill $PF_PID" EXIT
 
                         echo "Health check:"
                         for i in $(seq 1 10); do
-                          if curl -sf http://localhost:8080/health; then
+                          if curl -sf http://localhost:8090/health; then
                             echo "Health check passed"
                             break
                           fi
@@ -166,7 +177,7 @@ Image.fromarray(np.random.randint(0,255,(224,224,3),dtype='uint8')).save('sample
 "
                         # -H is a no-op if API auth is disabled on this deployment;
                         # required if the Secret in secret.yaml is populated.
-                        response=$(curl -sf -H "X-API-Key: $API_KEY_FOR_SMOKE_TEST" -F "file=@sample_test.jpg" http://localhost:8080/predict)
+                        response=$(curl -sf -H "X-API-Key: $API_KEY_FOR_SMOKE_TEST" -F "file=@sample_test.jpg" http://localhost:8090/predict)
                         echo "Prediction response: $response"
                         echo "$response" | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'label' in d and 'probability' in d"
                     '''
