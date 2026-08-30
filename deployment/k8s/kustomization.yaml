@@ -4,17 +4,18 @@ kind: Kustomization
 namespace: pet-adoption
 
 resources:
-  - namespace.yaml
-  - deployment.yaml
-  - service.yaml
-  - hpa.yaml
-  - networkpolicy.yaml
-  - pdb.yaml
+- namespace.yaml
+- deployment.yaml
+- service.yaml
+- hpa.yaml
+- networkpolicy.yaml
+- pdb.yaml
   # - ingress.yaml     # uncomment if your cluster has an ingress controller
   # - secret.yaml      # copy from secret.example.yaml, fill in a real key, then uncomment
                         # (or better: manage this Secret via Sealed Secrets / External
                         # Secrets Operator instead of applying it through this kustomization)
 
 images:
-  - name: ghcr.io/swapniljain782/dogs-cats-adoption/pet-classifier
-    newTag: latest
+- name: ghcr.io/swapniljain782/dogs-cats-adoption/pet-classifier
+  newName: ghcr.io/swapniljain782/dogs-cats-adoption/pet-classifier
+  newTag: 1313be7c45d9220441f062f05d2c771955a1ebcc
