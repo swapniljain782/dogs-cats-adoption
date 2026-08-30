@@ -96,6 +96,8 @@ Then version the raw data:
 dvc add data/raw
 git add data/raw.dvc .gitignore
 git commit -m "Track raw dataset with DVC"
+<img width="1295" height="170" alt="image" src="https://github.com/user-attachments/assets/42cb529e-f2bc-49fe-a3a5-1f99c372ce22" />
+
 ```
 
 ## 2. Preprocess + split
@@ -192,6 +194,14 @@ kustomize build . | kubectl apply -f -
 kubectl rollout status deployment/pet-classifier -n pet-adoption
 kubectl port-forward -n pet-adoption svc/pet-classifier-svc 8000:80
 ```
+<img width="1470" height="590" alt="image" src="https://github.com/user-attachments/assets/6b9eed5b-5e14-4706-8763-7725fa8c9615" />
+<img width="1470" height="716" alt="image" src="https://github.com/user-attachments/assets/cd4a78bf-8253-4092-b007-3f41584b08a9" />
+<img width="1470" height="150" alt="image" src="https://github.com/user-attachments/assets/769f382d-2da3-48d6-acb4-5a2312b20db2" />
+<img width="1470" height="879" alt="image" src="https://github.com/user-attachments/assets/7b16a5d6-e7a8-4d19-8d17-1b675b8dcb2d" />
+<img width="1470" height="881" alt="image" src="https://github.com/user-attachments/assets/6bf0f110-e05a-4741-9ac7-57944a4efdc1" />
+<img width="1470" height="487" alt="image" src="https://github.com/user-attachments/assets/7de53305-db14-41ed-a51c-87eda3b1b122" />
+
+
 
 `.github/workflows/cd-k8s.yml` does the same in CI: sets the image via kustomize,
 applies manifests, waits for rollout, smoke-tests via `kubectl port-forward`, and
@@ -215,6 +225,8 @@ repo's Actions settings) so they don't race to redeploy the same image different
 - Every request/response is logged (method, path, status, latency; no image bytes/PII).
 - `/metrics` — Prometheus-text format when `prometheus_client` is installed, JSON
   otherwise: request count, average latency, class-prediction distribution.
+  
+
 - `/dashboard/metrics` — richer JSON purpose-built for the live dashboard UI: request
   count, error count/rate, average latency, uptime, class distribution, total bytes
   processed, payload throughput (KB/s), host CPU %, host memory %, and a rolling
@@ -224,6 +236,7 @@ repo's Actions settings) so they don't race to redeploy the same image different
   rate, high latency, service down). `deployment/k8s/grafana-dashboard.yaml` is a
   ConfigMap with a pre-built Grafana dashboard (auto-discovered by Grafana if labeled
   `grafana_dashboard=1`).
+  
 - **Prometheus + Grafana (local)**: `deployment/monitoring/docker-compose.yml` spins up
   Prometheus (port 9090) and Grafana (port 3000, admin/admin) with the same dashboard
   pre-provisioned.
@@ -258,4 +271,4 @@ python scripts/track_performance.py --url https://octane-hardcore-pursuable.ngro
    request count, and class-distribution chart update.
 6. Show MLflow UI with the logged run (params/metrics/confusion matrix).
 7. Show `simulate_traffic.py` batch-accuracy result against the live deployment.
-# Full CI/CD pipeline verified Sat Aug 29 22:09:12 IST 2026
+
