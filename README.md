@@ -1,4 +1,4 @@
-## Pet Adoption Platform — Cats vs Dogs MLOps Pipeline
+# Pet Adoption Platform — Cats vs Dogs MLOps Pipeline
 
 End-to-end MLOps pipeline: data/model versioning → experiment tracking → packaging →
 containerization → CI → CD → deployment → monitoring, plus two web UIs (a model
