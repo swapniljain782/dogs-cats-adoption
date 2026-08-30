@@ -4,9 +4,11 @@ params, per-epoch metrics, confusion matrix, loss curve, and the model artifact.
 
 Usage:
     python src/models/train.py --data data/processed --epochs 10 --batch-size 32 --lr 1e-3
+    MLFLOW_TRACKING_URI=http://mlflow-server:5000 python src/models/train.py ...
 """
 import argparse
 import json
+import os
 from pathlib import Path
 
 import matplotlib
@@ -25,6 +27,12 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from src.data.dataset import get_dataloaders, IDX_TO_CLASS
 from src.models.model import build_model
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 
 def evaluate(model, loader, device, criterion):
@@ -79,6 +87,34 @@ def plot_confusion_matrix(y_true, y_pred, out_path: Path):
     return cm
 
 
+def configure_mlflow():
+    """Configure MLflow tracking URI and S3 artifact store from environment."""
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+        print(f"MLflow tracking URI set to: {tracking_uri}")
+
+    # S3/MinIO artifact store configuration
+    s3_endpoint = os.environ.get("MLFLOW_S3_ENDPOINT_URL")
+    if s3_endpoint:
+        os.environ["MLFLOW_S3_ENDPOINT_URL"] = s3_endpoint
+        os.environ["MLFLOW_S3_IGNORE_TLS"] = os.environ.get("MLFLOW_S3_IGNORE_TLS", "true")
+        print(f"MLflow S3 endpoint set to: {s3_endpoint}")
+
+    access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    if access_key and secret_key:
+        os.environ["AWS_ACCESS_KEY_ID"] = access_key
+        os.environ["AWS_SECRET_ACCESS_KEY"] = secret_key
+        print("MLflow S3 credentials configured")
+
+    # Local development defaults - if no tracking URI set, use local file store
+    if not tracking_uri:
+        local_uri = os.environ.get("MLFLOW_LOCAL_URI", "file:./mlruns")
+        mlflow.set_tracking_uri(local_uri)
+        print(f"MLflow tracking URI (local default): {local_uri}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=str, default="data/processed")
@@ -92,6 +128,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    configure_mlflow()
     mlflow.set_experiment(args.experiment)
 
     train_loader, val_loader, test_loader = get_dataloaders(
@@ -167,14 +204,13 @@ def main():
         print(f"Confusion matrix:\n{cm}")
         print(f"Model saved to {args.out_model} (also logged to MLflow)")
         metrics_path = Path("artifacts/metrics.json")
-with open(metrics_path, "w") as f:
-    json.dump({
-        "best_val_accuracy": best_val_acc,
-        "test_loss": test_loss,
-        "test_accuracy": test_acc,
-    }, f, indent=2)
-print(f"Metrics saved to {metrics_path}")
-
+        with open(metrics_path, "w") as f:
+            json.dump({
+                "best_val_accuracy": best_val_acc,
+                "test_loss": test_loss,
+                "test_accuracy": test_acc,
+            }, f, indent=2)
+        print(f"Metrics saved to {metrics_path}")
 
 
 if __name__ == "__main__":

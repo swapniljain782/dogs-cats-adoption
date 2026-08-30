@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  mlflow-postgres:
+    image: postgres:15-alpine
+    container_name: mlflow-postgres
+    environment:
+      - POSTGRES_DB=mlflow
+      - POSTGRES_USER=mlflow
+      - POSTGRES_PASSWORD=mlflow123
+    ports:
+      - "5432:5432"
+    volumes:
+      - mlflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mlflow-minio:
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    container_name: mlflow-minio
+    command: ["minio", "server", "/data", "--console-address", ":9001"]
+    environment:
+      - MINIO_ROOT_USER=mlflow
+      - MINIO_ROOT_PASSWORD=mlflow123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - mlflow-minio-data:/data
+
+  mlflow-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mlflow-server
+    environment:
+      - MLFLOW_TRACKING_URI=http://localhost:5000
+      - MLFLOW_S3_ENDPOINT_URL=http://mlflow-minio:9000
+      - MLFLOW_S3_IGNORE_TLS=true
+      - AWS_ACCESS_KEY_ID=mlflow
+      - AWS_SECRET_ACCESS_KEY=mlflow123
+      - POSTGRES_PASSWORD=mlflow123
+    ports:
+      - "5000:5000"
+    depends_on:
+      mlflow-postgres:
+        condition: service_healthy
+      mlflow-minio:
+        condition: service_started
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://mlflow:mlflow123@mlflow-postgres:5432/mlflow
+      --default-artifact-root s3://mlflow/
+      --artifacts-destination s3://mlflow/
+
+volumes:
+  mlflow-postgres-data:
+  mlflow-minio-data:
