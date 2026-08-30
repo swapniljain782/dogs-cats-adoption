@@ -1,0 +1,51 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pet-classifier-servicemonitor
+  namespace: pet-adoption
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: pet-classifier
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pet-classifier-alerts
+  namespace: pet-adoption
+  labels:
+    release: prometheus
+spec:
+  groups:
+  - name: pet-classifier.rules
+    rules:
+    - alert: PetClassifierHighErrorRate
+      expr: rate(predict_requests_total{job="pet-classifier",status=~"5.."}[5m]) > 0.05
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High error rate on pet-classifier"
+        description: "Error rate > 5% for 2 minutes"
+    - alert: PetClassifierHighLatency
+      expr: histogram_quantile(0.95, rate(predict_latency_seconds_bucket{job="pet-classifier"}[5m])) > 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High latency on pet-classifier"
+        description: "P95 latency > 1s for 5 minutes"
+    - alert: PetClassifierDown
+      expr: up{job="pet-classifier"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Pet classifier is down"
+        description: "No pet-classifier pods are ready"

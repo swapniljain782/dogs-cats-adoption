@@ -54,13 +54,20 @@ deployment/k8s/                # Kubernetes option (kustomize-based)
   service-nodeport.yaml        # NodePort variant for quick local kind/minikube access
   hpa.yaml                      # autoscaling on CPU/memory
   ingress.yaml                  # optional, needs an ingress controller
+  servicemonitor.yaml          # Prometheus ServiceMonitor + alert rules
+  grafana-dashboard.yaml       # Grafana dashboard ConfigMap
   kustomization.yaml
   kind-config.yaml              # local kind cluster config (exposes NodePort 30080)
   local-kind-deploy.sh          # one-shot local k8s deploy for demos
+deployment/monitoring/          # Local Prometheus + Grafana stack (docker-compose)
+  docker-compose.yml
+  prometheus.yml
+  grafana/
 .github/workflows/ci.yml        # test + build + push image
 .github/workflows/cd-compose.yml  # deploy path A: Docker Compose
 .github/workflows/cd-k8s.yml      # deploy path B: Kubernetes
 scripts/simulate_traffic.py       # post-deploy accuracy/latency batch check
+scripts/track_performance.py      # post-deployment performance tracking (M5)
 scripts/smoke_test.py             # standalone health+predict smoke test
 dvc.yaml                          # DVC pipeline (preprocess -> train)
 ```
@@ -212,6 +219,14 @@ repo's Actions settings) so they don't race to redeploy the same image different
   count, error count/rate, average latency, uptime, class distribution, total bytes
   processed, payload throughput (KB/s), host CPU %, host memory %, and a rolling
   window of the last 50 requests (timestamp + latency + label) for the live charts.
+- **Prometheus + Grafana (Kubernetes)**: `deployment/k8s/servicemonitor.yaml` provides a
+  `ServiceMonitor` for Prometheus Operator and `PrometheusRule` with alerts (high error
+  rate, high latency, service down). `deployment/k8s/grafana-dashboard.yaml` is a
+  ConfigMap with a pre-built Grafana dashboard (auto-discovered by Grafana if labeled
+  `grafana_dashboard=1`).
+- **Prometheus + Grafana (local)**: `deployment/monitoring/docker-compose.yml` spins up
+  Prometheus (port 9090) and Grafana (port 3000, admin/admin) with the same dashboard
+  pre-provisioned.
 - `scripts/simulate_traffic.py` fires a batch of requests with known labels against a
   running deployment and reports batch accuracy — the "post-deployment performance
   tracking" artifact:
@@ -220,7 +235,19 @@ repo's Actions settings) so they don't race to redeploy the same image different
 python scripts/simulate_traffic.py --url http://localhost:8000 --data-dir data/processed/test --n 30
 ```
 
-## Demo recording checklist (<5 min)
+- **New (M5)**: `scripts/track_performance.py` — standalone performance tracking that
+  collects predictions from the deployed service, simulates ground truth labels, and
+  computes accuracy/precision/recall/F1/confusion matrix + latency percentiles:
+
+```bash
+# Local (port-forward)
+python scripts/track_performance.py --url http://localhost:8091 --samples 50
+
+# Via ngrok
+python scripts/track_performance.py --url https://octane-hardcore-pursuable.ngrok-free.dev --samples 100
+```
+
+## 10. Demo recording checklist (<5 min)
 
 1. Make a small code change (e.g. tweak a docstring or threshold).
 2. `git push` → show GitHub Actions CI run (tests pass, image builds, pushes to ghcr.io).

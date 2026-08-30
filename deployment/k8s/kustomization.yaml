@@ -10,6 +10,8 @@ resources:
 - hpa.yaml
 - networkpolicy.yaml
 - pdb.yaml
+- servicemonitor.yaml
+- grafana-dashboard.yaml
   # - ingress.yaml     # uncomment if your cluster has an ingress controller
   # - secret.yaml      # copy from secret.example.yaml, fill in a real key, then uncomment
                         # (or better: manage this Secret via Sealed Secrets / External
