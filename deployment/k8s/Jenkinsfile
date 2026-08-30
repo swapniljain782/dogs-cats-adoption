@@ -18,23 +18,15 @@
 //                       manifest-bump commit)
 //   argocd-auth-token - ArgoCD auth token for the "ci-deployer" project role
 //                        (see deployment/argocd/project.yaml)
+//   kubeconfig-cd     - kubeconfig for the target cluster (smoke test only)
 //   pet-classifier-api-key - (Secret text) the same value stored in the
 //                        cluster's `pet-classifier-secrets` Secret, so the
 //                        smoke test can authenticate if API-key auth is
 //                        enabled. Leave empty (empty Secret text credential)
 //                        if the deployment doesn't require a key.
 //
-// Required tooling: git, kustomize, argocd CLI, kubectl, python3.
-// These are baked directly into the Jenkins controller image (see
-// deployment/jenkins/Dockerfile) - `agent any` runs pipeline steps in that
-// same container, so no separate agent pods or Kubernetes plugin are needed.
-//
-// The smoke-test stage's kubectl calls run in-cluster under the
-// jenkins-deployer ServiceAccount (see deployment/k8s/jenkins.yaml's
-// serviceAccountName and deployment/k8s/jenkins-rbac.yaml) - no kubeconfig
-// credential is needed or used, since a kubeconfig copied from your host
-// (e.g. kind's 127.0.0.1:<port> API server address) wouldn't be reachable
-// from a pod running inside the cluster anyway.
+// Required tools on the Jenkins agent (or use jenkins/Dockerfile.agent):
+//   git, kustomize, argocd CLI, kubectl, python3
 
 pipeline {
     agent any
@@ -55,6 +47,12 @@ pipeline {
         ARGOCD_SERVER    = 'argocd-server.argocd.svc.cluster.local:443'
         GIT_REPO_URL     = 'git@github.com:swapniljain782/dogs-cats-adoption.git'
         GIT_BRANCH       = 'main'
+        // kubectl/kustomize/argocd live here (see deployment/k8s/jenkins.yaml's
+        // initContainer) since the Jenkins controller pod doesn't run these
+        // pipeline steps on a separate agent - it's all-in-one for this setup.
+        // ${env.PATH} reads the container's actual runtime PATH, so this only
+        // prepends - it doesn't clobber whatever the base image already set.
+        PATH = "/opt/devtools:${env.PATH}"
     }
 
     options {
@@ -94,25 +92,31 @@ pipeline {
         stage('ArgoCD login') {
             steps {
                 withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
-                    sh """
-                        argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_TOKEN --grpc-web --insecure
-                    """
+                    sh '''
+                        echo "ARGOCD_TOKEN length: ${#ARGOCD_TOKEN}"
+                        if [ -z "$ARGOCD_TOKEN" ]; then
+                            echo "ERROR: argocd-auth-token credential is empty - check its value in Jenkins credentials."
+                            exit 1
+                        fi
+                        argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" --grpc-web --insecure
+                    '''
                 }
             }
         }
 
         stage('Sync via ArgoCD') {
             steps {
-                sh """
-                    argocd app sync ${ARGOCD_APP} --prune --timeout 180
-                    argocd app wait ${ARGOCD_APP} --health --timeout 180
-                """
+                sh '''
+                    argocd app sync "$ARGOCD_APP" --prune --timeout 180
+                    argocd app wait "$ARGOCD_APP" --health --timeout 180
+                '''
             }
         }
 
         stage('Smoke test') {
             steps {
                 withCredentials([
+                    file(credentialsId: 'kubeconfig-cd', variable: 'KUBECONFIG'),
                     string(credentialsId: 'pet-classifier-api-key', variable: 'API_KEY_FOR_SMOKE_TEST')
                 ]) {
                     sh '''
@@ -154,11 +158,11 @@ Image.fromarray(np.random.randint(0,255,(224,224,3),dtype='uint8')).save('sample
         failure {
             echo "Smoke test or sync failed - rolling back via ArgoCD."
             withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
-                sh """
-                    argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_TOKEN --grpc-web --insecure || true
-                    argocd app history ${ARGOCD_APP} || true
-                    argocd app rollback ${ARGOCD_APP} || true
-                """
+                sh '''
+                    argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" --grpc-web --insecure || true
+                    argocd app history "$ARGOCD_APP" || true
+                    argocd app rollback "$ARGOCD_APP" || true
+                '''
             }
         }
         always {

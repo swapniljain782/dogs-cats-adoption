@@ -37,11 +37,15 @@ pipeline {
 
     environment {
         REGISTRY        = 'ghcr.io'
-        IMAGE_NAME       = 'OWNER/REPO/pet-classifier'   // <-- set to your actual image path
+        IMAGE_NAME       = 'swapniljain782/dogs-cats-adoption/pet-classifier'
         NAMESPACE        = 'pet-adoption'
         ARGOCD_APP       = 'pet-classifier'
-        ARGOCD_SERVER    = 'argocd.internal.example.com'  // <-- set to your ArgoCD server address
-        GIT_REPO_URL     = 'git@github.com:OWNER/REPO.git' // <-- set to your actual repo (SSH form for push)
+        // Jenkins runs *inside* the cluster (see deployment/k8s/jenkins.yaml),
+        // so it reaches ArgoCD via the in-cluster Service DNS name - not
+        // localhost/port-forward, which only means something from your own
+        // machine. Default namespace/service name from install-argocd.sh.
+        ARGOCD_SERVER    = 'argocd-server.argocd.svc.cluster.local:443'
+        GIT_REPO_URL     = 'git@github.com:swapniljain782/dogs-cats-adoption.git'
         GIT_BRANCH       = 'main'
         // kubectl/kustomize/argocd live here (see deployment/k8s/jenkins.yaml's
         // initContainer) since the Jenkins controller pod doesn't run these
@@ -88,19 +92,24 @@ pipeline {
         stage('ArgoCD login') {
             steps {
                 withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
-                    sh """
-                        argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_TOKEN --grpc-web
-                    """
+                    sh '''
+                        echo "ARGOCD_TOKEN length: ${#ARGOCD_TOKEN}"
+                        if [ -z "$ARGOCD_TOKEN" ]; then
+                            echo "ERROR: argocd-auth-token credential is empty - check its value in Jenkins credentials."
+                            exit 1
+                        fi
+                        argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" --grpc-web --insecure
+                    '''
                 }
             }
         }
 
         stage('Sync via ArgoCD') {
             steps {
-                sh """
-                    argocd app sync ${ARGOCD_APP} --prune --timeout 180
-                    argocd app wait ${ARGOCD_APP} --health --timeout 180
-                """
+                sh '''
+                    argocd app sync "$ARGOCD_APP" --prune --timeout 180
+                    argocd app wait "$ARGOCD_APP" --health --timeout 180
+                '''
             }
         }
 
@@ -149,11 +158,11 @@ Image.fromarray(np.random.randint(0,255,(224,224,3),dtype='uint8')).save('sample
         failure {
             echo "Smoke test or sync failed - rolling back via ArgoCD."
             withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
-                sh """
-                    argocd login ${ARGOCD_SERVER} --auth-token \$ARGOCD_TOKEN --grpc-web || true
-                    argocd app history ${ARGOCD_APP} || true
-                    argocd app rollback ${ARGOCD_APP} || true
-                """
+                sh '''
+                    argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" --grpc-web --insecure || true
+                    argocd app history "$ARGOCD_APP" || true
+                    argocd app rollback "$ARGOCD_APP" || true
+                '''
             }
         }
         always {
