@@ -17,7 +17,11 @@
 //   git-push-creds   - SSH key or PAT with push access to this repo (for the
 //                       manifest-bump commit)
 //   argocd-auth-token - ArgoCD auth token for the "ci-deployer" project role
-//                        (see deployment/argocd/project.yaml)
+//                        (see deployment/argocd/project.yaml). Passed as a
+//                        --auth-token flag directly on every argocd command -
+//                        NOT via `argocd login`, which is built around
+//                        interactive/SSO sessions and doesn't handle
+//                        non-interactive token auth cleanly in this setup.
 //   kubeconfig-cd     - kubeconfig for the target cluster (smoke test only)
 //   pet-classifier-api-key - (Secret text) the same value stored in the
 //                        cluster's `pet-classifier-secrets` Secret, so the
@@ -45,6 +49,15 @@ pipeline {
         // localhost/port-forward, which only means something from your own
         // machine. Default namespace/service name from install-argocd.sh.
         ARGOCD_SERVER    = 'argocd-server.argocd.svc.cluster.local:443'
+        // Every argocd CLI call below passes --server/--auth-token/--insecure
+        // directly rather than using `argocd login` first - the stateful
+        // login flow is built around interactive/SSO sessions, and kept
+        // falling back to an interactive username prompt (which hangs
+        // forever in a non-interactive CI shell) even with --auth-token set.
+        // Passing the token as a flag on every command is the documented
+        // pattern for non-interactive API-token auth and skips that flow
+        // entirely: https://www.arthurkoziel.com/creating-argo-cd-service-account/
+        ARGOCD_FLAGS     = '--grpc-web --insecure'
         GIT_REPO_URL     = 'git@github.com:swapniljain782/dogs-cats-adoption.git'
         GIT_BRANCH       = 'main'
         // kubectl/kustomize/argocd live here (see deployment/k8s/jenkins.yaml's
@@ -89,7 +102,7 @@ pipeline {
             }
         }
 
-        stage('ArgoCD login') {
+        stage('Sync via ArgoCD') {
             steps {
                 withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
                     sh '''
@@ -98,18 +111,10 @@ pipeline {
                             echo "ERROR: argocd-auth-token credential is empty - check its value in Jenkins credentials."
                             exit 1
                         fi
-                        argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" --grpc-web --insecure
+                        argocd app sync "$ARGOCD_APP" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" $ARGOCD_FLAGS --prune --timeout 180
+                        argocd app wait "$ARGOCD_APP" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" $ARGOCD_FLAGS --health --timeout 180
                     '''
                 }
-            }
-        }
-
-        stage('Sync via ArgoCD') {
-            steps {
-                sh '''
-                    argocd app sync "$ARGOCD_APP" --prune --timeout 180 --grpc-web --insecure
-                    argocd app wait "$ARGOCD_APP" --health --timeout 180 --grpc-web --insecure
-                '''
             }
         }
 
@@ -159,9 +164,8 @@ Image.fromarray(np.random.randint(0,255,(224,224,3),dtype='uint8')).save('sample
             echo "Smoke test or sync failed - rolling back via ArgoCD."
             withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
                 sh '''
-                    argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" --grpc-web --insecure || true
-                    argocd app history "$ARGOCD_APP" --grpc-web --insecure || true
-                    argocd app rollback "$ARGOCD_APP" --grpc-web --insecure || true
+                    argocd app history "$ARGOCD_APP" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" $ARGOCD_FLAGS || true
+                    argocd app rollback "$ARGOCD_APP" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" $ARGOCD_FLAGS || true
                 '''
             }
         }
