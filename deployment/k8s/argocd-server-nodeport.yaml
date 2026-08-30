@@ -1,0 +1,21 @@
+# Optional: NodePort access to the ArgoCD UI/CLI for local kind development,
+# so you don't need a manual `kubectl port-forward` each time.
+#   kubectl apply -f argocd-server-nodeport.yaml
+# Then reach it at https://localhost:30443 (self-signed cert - browser/curl
+# will warn; ArgoCD serves TLS on this port by default) or via the argocd
+# CLI: argocd login localhost:30443 --insecure
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server-nodeport
+  namespace: argocd
+spec:
+  selector:
+    app.kubernetes.io/name: argocd-server
+  ports:
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 8080
+      nodePort: 30443
+  type: NodePort
