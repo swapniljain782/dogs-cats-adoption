@@ -1,0 +1,31 @@
+{
+  "accuracy": 0.9,
+  "precision": 0.45,
+  "recall": 0.5,
+  "f1": 0.47368421052631576,
+  "confusion_matrix": [
+    [
+      0,
+      5
+    ],
+    [
+      0,
+      45
+    ]
+  ],
+  "class_distribution": {
+    "cats": 0,
+    "dogs": 50
+  },
+  "avg_probability": 0.8486960661411286,
+  "sample_count": 50,
+  "latency": {
+    "mean_ms": 125.21178722381593,
+    "p50_ms": 103.00946235656738,
+    "p95_ms": 200.95570087432858,
+    "p99_ms": 229.70520257949826
+  },
+  "timestamp": 1788085515.893575,
+  "service_url": "http://localhost:8091",
+  "simulated_accuracy": 0.85
+}
