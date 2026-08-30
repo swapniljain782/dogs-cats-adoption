@@ -107,8 +107,8 @@ pipeline {
         stage('Sync via ArgoCD') {
             steps {
                 sh '''
-                    argocd app sync "$ARGOCD_APP" --prune --timeout 180
-                    argocd app wait "$ARGOCD_APP" --health --timeout 180
+                    argocd app sync "$ARGOCD_APP" --prune --timeout 180 --grpc-web --insecure
+                    argocd app wait "$ARGOCD_APP" --health --timeout 180 --grpc-web --insecure
                 '''
             }
         }
@@ -160,8 +160,8 @@ Image.fromarray(np.random.randint(0,255,(224,224,3),dtype='uint8')).save('sample
             withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_TOKEN')]) {
                 sh '''
                     argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" --grpc-web --insecure || true
-                    argocd app history "$ARGOCD_APP" || true
-                    argocd app rollback "$ARGOCD_APP" || true
+                    argocd app history "$ARGOCD_APP" --grpc-web --insecure || true
+                    argocd app rollback "$ARGOCD_APP" --grpc-web --insecure || true
                 '''
             }
         }
