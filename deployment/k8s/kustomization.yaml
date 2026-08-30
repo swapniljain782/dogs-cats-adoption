@@ -24,4 +24,4 @@ resources:
 images:
 - name: ghcr.io/swapniljain782/dogs-cats-adoption/pet-classifier
   newName: ghcr.io/swapniljain782/dogs-cats-adoption/pet-classifier
-  newTag: 5fc9e901021c1f5400a4089d78ad6368b62f9181
+  newTag: 527ec07c9babe999ccf5478d7c86d5a6e386de66
