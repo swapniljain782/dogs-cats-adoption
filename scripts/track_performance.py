@@ -46,25 +46,65 @@ def download_test_image() -> bytes:
         return generate_synthetic_image()
 
 
-def predict(url: str, image_bytes: bytes, api_key: str = "") -> Dict:
-    """Send prediction request to the service."""
+def predict(url: str, image_bytes: bytes, api_key: str = "", retries: int = 3) -> Dict:
+    """Send prediction request to the service, with retries for transient failures."""
     headers = {}
     if api_key:
         headers["X-API-Key"] = api_key
     
     files = {"file": ("test.jpg", image_bytes, "image/jpeg")}
-    resp = requests.post(f"{url}/predict", files=files, headers=headers, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+    for attempt in range(retries):
+        try:
+            resp = requests.post(f"{url}/predict", files=files, headers=headers, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+        except (requests.ConnectionError, requests.Timeout):
+            if attempt < retries - 1:
+                time.sleep(3)
+                continue
+            raise
 
 
-def health_check(url: str) -> bool:
-    """Check if service is healthy."""
+def ensure_port_forward(url: str) -> bool:
+    """Check if service is reachable, try to restart port-forward if not."""
     try:
+        resp = requests.get(f"{url}/health", timeout=3)
+        return resp.status_code == 200
+    except Exception:
+        pass
+    # Try restarting port-forward
+    import subprocess
+    try:
+        subprocess.run(
+            ["pkill", "-f", "kubectl port-forward.*pet-classifier-svc"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(1)
+        subprocess.Popen(
+            ["kubectl", "port-forward", "-n", "pet-adoption",
+             "svc/pet-classifier-svc", "8091:80"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        time.sleep(3)
         resp = requests.get(f"{url}/health", timeout=5)
-        return resp.status_code == 200 and resp.json().get("status") == "ok"
+        return resp.status_code == 200
     except Exception:
         return False
+
+
+def health_check(url: str, retries: int = 3, delay: float = 2.0) -> bool:
+    """Check if service is healthy, with retries for transient failures."""
+    for attempt in range(retries):
+        try:
+            resp = requests.get(f"{url}/health", timeout=5)
+            if resp.status_code == 200 and resp.json().get("status") == "ok":
+                return True
+        except Exception:
+            pass
+        if attempt < retries - 1:
+            print(f"  Health check attempt {attempt + 1} failed, retrying in {delay}s...")
+            time.sleep(delay)
+    return False
 
 
 def simulate_labels(predictions: List[Dict], accuracy: float = 0.85) -> List[str]:
@@ -136,9 +176,19 @@ def main():
             else:
                 image_bytes = generate_synthetic_image()
             
-            start = time.time()
-            result = predict(args.url, image_bytes, args.api_key)
-            latency = time.time() - start
+            try:
+                start = time.time()
+                result = predict(args.url, image_bytes, args.api_key)
+                latency = time.time() - start
+            except (requests.ConnectionError, requests.Timeout):
+                print(f"  Connection lost, restarting port-forward...")
+                if ensure_port_forward(args.url):
+                    start = time.time()
+                    result = predict(args.url, image_bytes, args.api_key)
+                    latency = time.time() - start
+                else:
+                    print(f"  Request {i+1} failed: could not reconnect")
+                    continue
             
             predictions.append(result)
             latencies.append(latency)

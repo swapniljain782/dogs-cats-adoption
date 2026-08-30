@@ -4,7 +4,7 @@ service and report accuracy against known labels (post-deployment performance
 tracking, M5).
 
 Usage:
-    python scripts/simulate_traffic.py --url http://localhost:8000 --data-dir data/processed/test --n 30
+    python scripts/simulate_traffic.py --url http://localhost:8091 --data-dir data/processed/test --n 30
 """
 import argparse
 import random
@@ -29,7 +29,7 @@ def collect_samples(data_dir: Path, n: int, seed: int = 0):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", type=str, default="http://localhost:8000")
+    parser.add_argument("--url", type=str, default="http://localhost:8091")
     parser.add_argument("--data-dir", type=str, default="data/processed/test")
     parser.add_argument("--n", type=int, default=30)
     args = parser.parse_args()
@@ -45,17 +45,26 @@ def main():
     correct, total, latencies = 0, 0, []
 
     for path, true_label in samples:
-        with open(path, "rb") as f:
-            start = time.time()
-            resp = requests.post(
-                f"{args.url}/predict",
-                files={"file": (path.name, f, "image/jpeg")},
-                timeout=10,
-            )
-            latencies.append(time.time() - start)
+        for attempt in range(3):
+            try:
+                with open(path, "rb") as f:
+                    start = time.time()
+                    resp = requests.post(
+                        f"{args.url}/predict",
+                        files={"file": (path.name, f, "image/jpeg")},
+                        timeout=10,
+                    )
+                    latencies.append(time.time() - start)
+                break
+            except (requests.ConnectionError, requests.Timeout):
+                if attempt < 2:
+                    time.sleep(2)
+                    continue
+                print(f"  [FAIL] {path.name}: connection failed after 3 attempts")
+                resp = None
 
-        if resp.status_code != 200:
-            print(f"  [WARN] {path.name}: request failed ({resp.status_code})")
+        if resp is None or resp.status_code != 200:
+            print(f"  [WARN] {path.name}: request failed ({resp.status_code if resp else 'no response'})")
             continue
 
         pred_label = resp.json()["label"]

@@ -1,31 +1,31 @@
 {
-  "accuracy": 0.9,
-  "precision": 0.45,
-  "recall": 0.5,
-  "f1": 0.47368421052631576,
+  "accuracy": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
   "confusion_matrix": [
     [
-      0,
-      5
+      10,
+      0
     ],
     [
       0,
-      45
+      0
     ]
   ],
   "class_distribution": {
-    "cats": 0,
-    "dogs": 50
+    "cats": 10,
+    "dogs": 0
   },
-  "avg_probability": 0.8486960661411286,
-  "sample_count": 50,
+  "avg_probability": 0.9803343534469604,
+  "sample_count": 10,
   "latency": {
-    "mean_ms": 125.21178722381593,
-    "p50_ms": 103.00946235656738,
-    "p95_ms": 200.95570087432858,
-    "p99_ms": 229.70520257949826
+    "mean_ms": 152.61614322662354,
+    "p50_ms": 148.57065677642822,
+    "p95_ms": 223.7975716590881,
+    "p99_ms": 227.26264238357544
   },
-  "timestamp": 1788085515.893575,
+  "timestamp": 1788098673.177747,
   "service_url": "http://localhost:8091",
   "simulated_accuracy": 0.85
 }
